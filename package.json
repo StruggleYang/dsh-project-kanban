@@ -11,6 +11,17 @@
     "LICENSE"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/StruggleYang/dsh-project-kanban.git"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "kanban",
+    "plugin"
+  ],
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
