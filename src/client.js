@@ -6,8 +6,9 @@
  *
  * 职责：
  *  - 注册到 conversation.view 视图环（id: 'kanban'），会话头部出现「看板」标签页
+ *  - 经标准 props 的 useWorkspaces 选择器定位当前会话所属工作区（按 sessionIds 匹配），
+ *    所有 RPC 携带 workspaceId —— 每个项目一块独立看板
  *  - 看板 UI：列表 + 卡片、拖拽/按钮移动、内联编辑、添加/重命名/删除列表
- *  - 经 host.call 调用宿主 RPC（kanban.*）
  */
 return {
   apply(ctx) {
@@ -18,7 +19,17 @@ return {
     const h = React.createElement
     const emptyDraft = { title: '', note: '', open: false }
 
-    function KanbanView() {
+    function KanbanView(props) {
+      const sessionId = props && props.sessionId
+      const useWorkspaces = props && props.useWorkspaces
+      const items = useWorkspaces ? useWorkspaces((s) => s.items) : []
+      const recentId = useWorkspaces ? useWorkspaces((s) => s.recentWorkspaceId) : undefined
+      const workspace = Array.isArray(items)
+        ? items.find((w) => Array.isArray(w.sessionIds) && w.sessionIds.includes(sessionId))
+        : undefined
+      const workspaceId = workspace ? workspace.workspaceId : (recentId || 'default')
+      const workspaceTitle = workspace ? workspace.title : (workspaceId === 'default' ? '默认工作区' : '未知工作区')
+
       const [board, setBoard] = React.useState(null)
       const [error, setError] = React.useState('')
       const [busy, setBusy] = React.useState(false)
@@ -42,17 +53,17 @@ return {
 
       React.useEffect(() => {
         let alive = true
-        host.call('kanban.get').then((res) => {
+        host.call('kanban.get', { workspaceId }).then((res) => {
           if (alive) applyRes(res)
         }).catch((e) => {
           if (alive) setError('看板加载失败：' + ((e && e.message) || e))
         })
         return () => { alive = false }
-      }, [])
+      }, [workspaceId])
 
       const act = (method, args) => {
         setBusy(true)
-        host.call(method, args || {}).then(applyRes).catch((e) => {
+        host.call(method, Object.assign({}, args || {}, { workspaceId })).then(applyRes).catch((e) => {
           setError('操作失败：' + ((e && e.message) || e))
         }).then(() => setBusy(false))
       }
@@ -168,18 +179,18 @@ return {
 
       return h('div', { className: 'kan-root' }, [
         h('div', { className: 'kan-header' }, [
-          h('h2', null, '项目看板'),
-          h('span', { className: 'kan-sub' }, '' + total + ' 张卡片 · 拖拽卡片或使用 ← → 移动'),
+          h('h2', null, '项目看板 · ' + workspaceTitle),
+          h('span', { className: 'kan-sub' }, '' + total + ' 张卡片 · 按工作区隔离 · 拖拽或 ← → 移动'),
           error ? h('span', { className: 'kan-error' }, error) : null,
         ]),
         h('div', { className: 'kan-board' }, [...board.columns.map(renderColumn), newColForm]),
-        h('div', { className: 'kan-hint' }, persisted ? '数据已持久化到磁盘（kanban-board.json），重启不丢失。' : '内存模式：刷新页面不丢失；停止插件或重启进程后清空。'),
+        h('div', { className: 'kan-hint' }, persisted ? '数据已持久化到磁盘（按工作区分文件），重启不丢失。' : '内存模式：刷新页面不丢失；停止插件或重启进程后清空。'),
       ])
     }
 
     slots.inject('conversation.view', () => slots.register(
       { name: 'conversation.view', id: 'kanban', order: 20, label: '看板' },
-      () => h(KanbanView),
+      (props) => h(KanbanView, props),
     ))
   },
 }
