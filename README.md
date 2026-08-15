@@ -14,6 +14,16 @@ This is an official **bundle**-format plugin (`dsh.bundle` declaration + `cordis
 - **Priority**: high / medium / low with a colored left-edge bar (red / orange / blue)
 - **Custom card color**: any `#rrggbb` background via the color picker in the edit form
 - **In-column ordering & duplication**: ↑ / ↓ buttons (or the `toIndex` parameter) reorder cards within a column; one-click duplicate copies label/priority/color
+- **Filtering & search**: keyword, label, and priority filters at the top of the board
+- **Due dates**: YYYY-MM-DD deadline with automatic overdue highlighting
+- **Trash & restore**: delete is soft (to the trash); restore or purge from the trash view
+- **Bulk operations**: multi-select cards to move / label / trash in one action
+- **Stats bar**: totals by label, priority, and overdue count
+- **Drag reordering**: drag a card onto another card's position to insert there
+- **Templates**: default / dev / content column presets (adds missing columns only)
+- **Undo**: every write operation is undoable (50-step stack)
+- **Cross-workspace move**: move a card into another project's board
+- **Session references**: cards created by the agent record their source session (click to jump back)
 
 ## Installation (official flow)
 
@@ -90,15 +100,26 @@ Removes both the dependency and the layer; board data files are kept on disk.
 
 | Tool | Purpose |
 |---|---|
-| `kanban_get` | Read the current board (check before planning to avoid duplicate cards) |
-| `kanban_add_card` | Add a card (title, note, optional `label` / `priority` / `color`) |
-| `kanban_update_card` | Update title / note / label / priority / color |
-| `kanban_delete_card` | Delete a card |
+| `kanban_get` | Read the current board (optional `includeArchived` for the trash) |
+| `kanban_add_card` | Add a card (title, note, optional label / priority / color / dueDate) |
+| `kanban_update_card` | Update title / note / label / priority / color / dueDate |
+| `kanban_delete_card` | Soft-delete into the trash |
+| `kanban_restore_card` | Restore a card from the trash |
+| `kanban_purge_card` | Permanently delete a card |
+| `kanban_bulk_delete_cards` | Bulk soft-delete multiple cards |
 | `kanban_move_card` | Move across columns, or reorder within a column via `toIndex` |
-| `kanban_duplicate_card` | Duplicate a card (carries label/priority/color) |
-| `kanban_add_column` | Add a list (new workflow stage) |
-| `kanban_rename_column` | Rename a list |
-| `kanban_delete_column` | Delete a list (cards move to the first column) |
+| `kanban_duplicate_card` | Duplicate a card (carries all fields) |
+| `kanban_move_card_to_workspace` | Move a card to another workspace's board |
+| `kanban_undo` | Undo the last write operation |
+| `kanban_add_column` / `kanban_rename_column` / `kanban_delete_column` | Column management |
+
+## Testing
+
+Keyless end-to-end verification (no `DEEPSEEK_API_KEY` needed): creates a temporary profile, installs the local package, boots the web composition, and asserts the tool schemas plus the full HTTP workflow.
+
+```sh
+bash scripts/verify.sh
+```
 
 ## Repository layout
 
