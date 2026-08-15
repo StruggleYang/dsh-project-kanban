@@ -1,0 +1,19 @@
+{
+  "name": "dsh-project-kanban",
+  "version": "0.1.0",
+  "description": "DeepSeek Harness 项目看板：Agent 规划时用 kanban_* 工具写卡，按工作区（项目）隔离，磁盘持久化",
+  "type": "module",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}
