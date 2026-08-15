@@ -123,6 +123,126 @@ export function apply(ctx) {
   const findColumn = (b, id) => b.columns.find((c) => c.id === id)
   const colOf = (b, columnId) => findColumn(b, str(columnId, '')) || b.columns[0]
 
+  // ---- 数据层：浏览器端经 /api/kanban HTTP 路由调用（官方 webServer 扩展点） ----
+  const wsidOf = (args) => {
+    const v = args && args.workspaceId
+    return typeof v === 'string' && v.length > 0 ? v : 'default'
+  }
+  const cloneBoard = (b) => ({
+    columns: b.columns.map((c) => ({ id: c.id, title: c.title })),
+    cards: b.cards.map((c) => ({ id: c.id, columnId: c.columnId, title: c.title, note: c.note })),
+  })
+  const dispatch = async (method, args) => {
+    const wsid = wsidOf(args)
+    const b = await boardOf(wsid)
+    const a = args || {}
+    switch (method) {
+      case 'kanban.get':
+        return { board: cloneBoard(b), persisted: fileTargets.has(wsid) && fileTargets.get(wsid) !== null }
+      case 'kanban.addCard': {
+        const col = colOf(b, a.columnId)
+        if (!col) return { board: cloneBoard(b) }
+        b.cards.push({
+          id: 'k' + (++seq),
+          columnId: col.id,
+          title: str(a.title, '').slice(0, 120) || '未命名卡片',
+          note: str(a.note, '').slice(0, 500),
+        })
+        await save(wsid)
+        return { board: cloneBoard(b), persisted: true }
+      }
+      case 'kanban.updateCard': {
+        const card = findCard(b, str(a.id, ''))
+        if (card) {
+          if (typeof a.title === 'string') card.title = a.title.slice(0, 120) || card.title
+          if (typeof a.note === 'string') card.note = a.note.slice(0, 500)
+          await save(wsid)
+        }
+        return { board: cloneBoard(b) }
+      }
+      case 'kanban.deleteCard': {
+        const id = str(a.id, '')
+        b.cards = b.cards.filter((c) => c.id !== id)
+        await save(wsid)
+        return { board: cloneBoard(b) }
+      }
+      case 'kanban.moveCard': {
+        const card = findCard(b, str(a.id, ''))
+        const target = findColumn(b, str(a.columnId, ''))
+        if (card && target) {
+          card.columnId = target.id
+          await save(wsid)
+        }
+        return { board: cloneBoard(b) }
+      }
+      case 'kanban.addColumn': {
+        const title = str(a.title, '').slice(0, 40) || '新列表'
+        b.columns.push({ id: 'c' + (++seq), title })
+        await save(wsid)
+        return { board: cloneBoard(b) }
+      }
+      case 'kanban.renameColumn': {
+        const col = findColumn(b, str(a.id, ''))
+        if (col && typeof a.title === 'string') {
+          col.title = a.title.slice(0, 40) || col.title
+          await save(wsid)
+        }
+        return { board: cloneBoard(b) }
+      }
+      case 'kanban.deleteColumn': {
+        const id = str(a.id, '')
+        if (b.columns.length <= 1) return { board: cloneBoard(b) }
+        const idx = b.columns.findIndex((c) => c.id === id)
+        if (idx < 0) return { board: cloneBoard(b) }
+        b.columns.splice(idx, 1)
+        const fallback = b.columns[0].id
+        for (const card of b.cards) {
+          if (card.columnId === id) card.columnId = fallback
+        }
+        await save(wsid)
+        return { board: cloneBoard(b) }
+      }
+      default:
+        return { error: 'unknown kanban method: ' + method }
+    }
+  }
+  const httpHandler = async (req, res) => {
+    try {
+      const chunks = []
+      for await (const chunk of req) chunks.push(chunk)
+      const raw = Buffer.concat(chunks).toString('utf8')
+      const body = raw ? JSON.parse(raw) : {}
+      const method = typeof body.method === 'string' ? body.method : 'kanban.get'
+      const result = await dispatch(method, body.args || {})
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify(result))
+    } catch (e) {
+      res.writeHead(500, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ error: String((e && e.message) || e) }))
+    }
+  }
+  const routeState = { registered: false, timer: null }
+  const registerHttpRoute = () => {
+    if (routeState.registered) return
+    const webServer = ctx.get('webServer')
+    if (webServer === undefined) return
+    try {
+      webServer.register({ kind: 'prefix', path: '/api/kanban', handler: httpHandler })
+      routeState.registered = true
+      console.log('kanban: /api/kanban route registered')
+    } catch (e) {
+      console.log('kanban: route register failed: ' + ((e && e.message) || e))
+    }
+  }
+  // webServer 由 web-app 行提供，可能在 apply 之后才激活：轮询注册（最多 20 秒）
+  registerHttpRoute()
+  if (!routeState.registered) {
+    routeState.timer = setInterval(() => {
+      registerHttpRoute()
+      if (routeState.registered) clearInterval(routeState.timer)
+    }, 500)
+  }
+
   const resultSchema = {
     type: 'object',
     properties: {
