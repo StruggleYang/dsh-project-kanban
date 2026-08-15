@@ -141,6 +141,18 @@ export function apply(ctx) {
       .filter((c) => includeArchived || c.archived !== true)
       .map((c) => ({ id: c.id, columnId: c.columnId, title: c.title, note: c.note, label: c.label ?? null, priority: c.priority ?? null, color: c.color ?? null, dueDate: c.dueDate ?? null, archived: c.archived === true }))
   })
+  const undoStacks = new Map()
+  const pushUndo = (wsid, b) => {
+    if (!undoStacks.has(wsid)) undoStacks.set(wsid, [])
+    const stack = undoStacks.get(wsid)
+    stack.push(JSON.parse(JSON.stringify({ columns: b.columns, cards: b.cards })))
+    if (stack.length > 50) stack.shift()
+  }
+  const TEMPLATES = {
+    default: ['待办', '进行中', '已完成'],
+    dev: ['待办', '进行中', '评审', '已完成'],
+    content: ['选题', '写作', '审核', '发布'],
+  }
   const dispatch = async (method, args) => {
     const wsid = wsidOf(args)
     const b = await boardOf(wsid)
@@ -154,6 +166,7 @@ export function apply(ctx) {
         }
       }
       case 'kanban.addCard': {
+        pushUndo(wsid, b)
         const col = colOf(b, a.columnId)
         if (!col) return { board: cloneBoard(b) }
         b.cards.push({
@@ -170,6 +183,7 @@ export function apply(ctx) {
         return { board: cloneBoard(b), persisted: true }
       }
       case 'kanban.updateCard': {
+        pushUndo(wsid, b)
         const card = findCard(b, str(a.id, ''))
         if (card) {
           if (typeof a.title === 'string') card.title = a.title.slice(0, 120) || card.title
@@ -183,6 +197,7 @@ export function apply(ctx) {
         return { board: cloneBoard(b) }
       }
       case 'kanban.deleteCard': {
+        pushUndo(wsid, b)
         // 软删除：标记 archived，卡片进入回收站（可从 UI 或 restore_card 恢复）
         const card = findCard(b, str(a.id, ''))
         if (card) {
@@ -192,6 +207,7 @@ export function apply(ctx) {
         return { board: cloneBoard(b) }
       }
       case 'kanban.restoreCard': {
+        pushUndo(wsid, b)
         const card = findCard(b, str(a.id, ''))
         if (card) {
           card.archived = false
@@ -200,12 +216,14 @@ export function apply(ctx) {
         return { board: cloneBoard(b) }
       }
       case 'kanban.purgeCard': {
+        pushUndo(wsid, b)
         const id = str(a.id, '')
         b.cards = b.cards.filter((c) => c.id !== id)
         await save(wsid)
         return { board: cloneBoard(b) }
       }
       case 'kanban.duplicateCard': {
+        pushUndo(wsid, b)
         const card = findCard(b, str(a.id, ''))
         if (!card) return { board: cloneBoard(b) }
         const copy = {
@@ -226,6 +244,7 @@ export function apply(ctx) {
         return { board: cloneBoard(b), persisted: true }
       }
       case 'kanban.moveCard': {
+        pushUndo(wsid, b)
         const card = findCard(b, str(a.id, ''))
         const target = findColumn(b, str(a.columnId, ''))
         if (card && target) {
@@ -249,12 +268,14 @@ export function apply(ctx) {
         return { board: cloneBoard(b) }
       }
       case 'kanban.addColumn': {
+        pushUndo(wsid, b)
         const title = str(a.title, '').slice(0, 40) || '新列表'
         b.columns.push({ id: 'c' + (++seq), title })
         await save(wsid)
         return { board: cloneBoard(b) }
       }
       case 'kanban.renameColumn': {
+        pushUndo(wsid, b)
         const col = findColumn(b, str(a.id, ''))
         if (col && typeof a.title === 'string') {
           col.title = a.title.slice(0, 40) || col.title
@@ -263,6 +284,7 @@ export function apply(ctx) {
         return { board: cloneBoard(b) }
       }
       case 'kanban.deleteColumn': {
+        pushUndo(wsid, b)
         const id = str(a.id, '')
         if (b.columns.length <= 1) return { board: cloneBoard(b) }
         const idx = b.columns.findIndex((c) => c.id === id)
@@ -276,6 +298,7 @@ export function apply(ctx) {
         return { board: cloneBoard(b) }
       }
       case 'kanban.bulkMoveCards': {
+        pushUndo(wsid, b)
         const ids = Array.isArray(a.ids) ? a.ids.filter((x) => typeof x === 'string') : []
         const target = findColumn(b, str(a.columnId, ''))
         if (target) {
@@ -288,6 +311,7 @@ export function apply(ctx) {
         return { board: cloneBoard(b) }
       }
       case 'kanban.bulkDeleteCards': {
+        pushUndo(wsid, b)
         const ids = Array.isArray(a.ids) ? a.ids.filter((x) => typeof x === 'string') : []
         for (const id of ids) {
           const card = findCard(b, id)
@@ -297,6 +321,7 @@ export function apply(ctx) {
         return { board: cloneBoard(b) }
       }
       case 'kanban.bulkSetLabel': {
+        pushUndo(wsid, b)
         const ids = Array.isArray(a.ids) ? a.ids.filter((x) => typeof x === 'string') : []
         const label = typeof a.label === 'string' ? a.label.slice(0, 20) : ''
         for (const id of ids) {
@@ -305,6 +330,29 @@ export function apply(ctx) {
         }
         await save(wsid)
         return { board: cloneBoard(b) }
+      }
+      case 'kanban.undo': {
+        const stack = undoStacks.get(wsid)
+        const snapshot = stack ? stack.pop() : undefined
+        if (snapshot) {
+          b.columns = snapshot.columns
+          b.cards = snapshot.cards
+          await save(wsid)
+          return { board: cloneBoard(b), persisted: true, undone: true }
+        }
+        return { board: cloneBoard(b), undone: false }
+      }
+      case 'kanban.applyTemplate': {
+        const name = str(a.name, '')
+        const cols = TEMPLATES[name]
+        if (!cols) return { board: cloneBoard(b), error: 'unknown template: ' + name }
+        pushUndo(wsid, b)
+        const existing = new Set(b.columns.map((c) => c.title))
+        for (const title of cols) {
+          if (!existing.has(title)) b.columns.push({ id: 'c' + (++seq), title })
+        }
+        await save(wsid)
+        return { board: cloneBoard(b), persisted: true }
       }
       default:
         return { error: 'unknown kanban method: ' + method }
@@ -376,6 +424,25 @@ export function apply(ctx) {
   const toolResult = (message, b) => ({ ok: true, message, board: summary(b) })
 
   const tools = [
+    {
+      name: 'kanban_undo',
+      description: '撤销看板上一次操作（添加/编辑/移动/删除/列表变更等）。',
+      parameters: { type: 'object', properties: {} },
+      output: { schema: resultSchema, render: (args, value) => renderBoard(value) },
+      async execute(args, exec) {
+        const wsid = await wsidOfExec(exec)
+        const b = await boardOf(wsid)
+        const stack = undoStacks.get(wsid)
+        const snapshot = stack ? stack.pop() : undefined
+        if (snapshot) {
+          b.columns = snapshot.columns
+          b.cards = snapshot.cards
+          await save(wsid)
+          return toolResult('已撤销上次操作', b)
+        }
+        return toolResult('没有可撤销的操作', b)
+      },
+    },
     {
       name: 'kanban_get',
       description: '读取当前项目（工作区）看板的当前状态（所有列表与卡片）。做规划前先调用它了解现有内容，避免重复建卡。',
