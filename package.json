@@ -1,6 +1,6 @@
 {
   "name": "dsh-project-kanban",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "DeepSeek Harness 项目看板（双端）：浏览器看板 UI + 8 个 kanban_* 模型工具，按工作区（项目）隔离，磁盘持久化",
   "type": "module",
   "main": "index.js",
@@ -36,7 +36,8 @@
     "client": {
       "platform": "web",
       "inject": [
-        "slots"
+        "slots",
+        "sessions"
       ]
     }
   }

@@ -118,7 +118,7 @@ export function apply(ctx) {
         title: c.title,
         count: visible.filter((k) => k.columnId === c.id).length,
       })),
-      cards: visible.map((c) => ({ id: c.id, columnId: c.columnId, title: c.title, label: c.label ?? null, priority: c.priority ?? null, color: c.color ?? null, dueDate: c.dueDate ?? null, archived: c.archived === true })),
+      cards: visible.map((c) => ({ id: c.id, columnId: c.columnId, title: c.title, label: c.label ?? null, priority: c.priority ?? null, color: c.color ?? null, dueDate: c.dueDate ?? null, archived: c.archived === true, source: c.source ?? null })),
     }
   }
   const str = (v, fb) => (typeof v === 'string' ? v : fb)
@@ -139,7 +139,7 @@ export function apply(ctx) {
     columns: b.columns.map((c) => ({ id: c.id, title: c.title })),
     cards: b.cards
       .filter((c) => includeArchived || c.archived !== true)
-      .map((c) => ({ id: c.id, columnId: c.columnId, title: c.title, note: c.note, label: c.label ?? null, priority: c.priority ?? null, color: c.color ?? null, dueDate: c.dueDate ?? null, archived: c.archived === true }))
+      .map((c) => ({ id: c.id, columnId: c.columnId, title: c.title, note: c.note, label: c.label ?? null, priority: c.priority ?? null, color: c.color ?? null, dueDate: c.dueDate ?? null, archived: c.archived === true, source: c.source ?? null }))
   })
   const undoStacks = new Map()
   const pushUndo = (wsid, b) => {
@@ -354,6 +354,20 @@ export function apply(ctx) {
         await save(wsid)
         return { board: cloneBoard(b), persisted: true }
       }
+      case 'kanban.moveCardToWorkspace': {
+        const toWsid = str(a.toWorkspaceId, '')
+        const card = findCard(b, str(a.id, ''))
+        if (!card) return { board: cloneBoard(b), error: '找不到卡片' }
+        if (!toWsid) return { board: cloneBoard(b), error: '缺少 toWorkspaceId' }
+        if (toWsid === wsid) return { board: cloneBoard(b), error: '目标工作区与当前相同' }
+        pushUndo(wsid, b)
+        const targetBoard = await boardOf(toWsid)
+        b.cards = b.cards.filter((c) => c.id !== card.id)
+        targetBoard.cards.push({ ...card, columnId: (targetBoard.columns[0] || { id: 'c1' }).id })
+        await save(wsid)
+        await save(toWsid)
+        return { board: cloneBoard(b), persisted: true }
+      }
       default:
         return { error: 'unknown kanban method: ' + method }
     }
@@ -490,6 +504,11 @@ export function apply(ctx) {
           priority: normPriority(args && args.priority),
           color: normColor(args && args.color),
           dueDate: normDueDate(args && args.dueDate),
+          source: (() => {
+            const agent = exec && exec.agent
+            const sessionId = agent && agent.session && agent.session.sessionId
+            return sessionId ? { sessionId, at: new Date().toISOString() } : undefined
+          })(),
         })
         await save(wsid)
         return toolResult('已添加卡片到「' + col.title + '」（工作区 ' + wsid + '）', b)
@@ -543,6 +562,35 @@ export function apply(ctx) {
         b.cards = b.cards.filter((c) => c.id !== id)
         await save(wsid)
         return toolResult('已删除卡片', b)
+      },
+    },
+    {
+      name: 'kanban_move_card_to_workspace',
+      description: '把一张卡片移动到另一个工作区（项目）的看板（移到目标板的第一个列表）。',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: '卡片 id' },
+          toWorkspaceId: { type: 'string', description: '目标工作区 id（可用 bash 读取 workspace.json 获取，或让 UI 操作）' },
+        },
+        required: ['id', 'toWorkspaceId'],
+      },
+      output: { schema: resultSchema, render: (args, value) => renderBoard(value) },
+      async execute(args, exec) {
+        const wsid = await wsidOfExec(exec)
+        const b = await boardOf(wsid)
+        const toWsid = str(args && args.toWorkspaceId, '')
+        const card = findCard(b, str(args && args.id, ''))
+        if (!card) return { ok: false, message: '找不到卡片' }
+        if (!toWsid) return { ok: false, message: '缺少 toWorkspaceId' }
+        if (toWsid === wsid) return { ok: false, message: '目标工作区与当前相同' }
+        pushUndo(wsid, b)
+        const targetBoard = await boardOf(toWsid)
+        b.cards = b.cards.filter((c) => c.id !== card.id)
+        targetBoard.cards.push({ ...card, columnId: (targetBoard.columns[0] || { id: 'c1' }).id })
+        await save(wsid)
+        await save(toWsid)
+        return toolResult('已移动到工作区 ' + toWsid, b)
       },
     },
     {
