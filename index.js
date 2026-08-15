@@ -20,16 +20,22 @@ export const name = 'dsh-project-kanban'
 export const inject = ['tools']
 
 export function apply(ctx) {
-  const fs = ctx.get('fs')
-  const sandboxPolicy = ctx.get('sandboxPolicy')
-  const workspaceRegistry = ctx.get('workspaceRegistry')
+  // 服务在 apply 挂载阶段可能尚未激活：一律在每次使用时惰性读取（ctx.get），
+  // 而不是在 apply 时缓存——否则组合里稍后激活的提供者（fs-sandbox 等）永远不可见。
+  const getFs = () => ctx.get('fs')
+  const getPolicy = () => ctx.get('sandboxPolicy')
+  const getWorkspaceRegistry = () => ctx.get('workspaceRegistry')
   const boards = new Map()
   const fileTargets = new Map()
   let seq = 0
 
-  const root = () => (sandboxPolicy && typeof sandboxPolicy.workspaceRoot === 'string' ? sandboxPolicy.workspaceRoot : undefined)
+  const root = () => {
+    const sandboxPolicy = getPolicy()
+    return sandboxPolicy && typeof sandboxPolicy.workspaceRoot === 'string' ? sandboxPolicy.workspaceRoot : undefined
+  }
   const fileName = (wsid) => 'kanban-board-' + wsid + '.json'
   const resolveFile = async (wsid) => {
+    const fs = getFs()
     if (!fs) return null
     try {
       return await fs.resolve(fileName(wsid), root() ? { cwd: root() } : {})
@@ -47,6 +53,7 @@ export function apply(ctx) {
     if (!b) {
       b = { columns: [], cards: [] }
       boards.set(wsid, b)
+      const fs = getFs()
       const target = await targetOf(wsid)
       if (fs && target) {
         try {
@@ -76,6 +83,7 @@ export function apply(ctx) {
     return b
   }
   const save = async (wsid) => {
+    const fs = getFs()
     const target = await targetOf(wsid)
     if (!fs || !target) return
     const b = boards.get(wsid)
@@ -89,12 +97,15 @@ export function apply(ctx) {
   const wsidOfExec = async (exec) => {
     const agent = exec && exec.agent
     const cwd = agent && agent.session && agent.session.header && agent.session.header.cwd
-    if (typeof cwd === 'string' && workspaceRegistry) {
-      try {
-        const ws = await workspaceRegistry.resolveByPath(cwd)
-        if (ws) return ws.id
-      } catch (e) {
-        console.log('kanban: workspace resolve failed: ' + ((e && e.message) || e))
+    if (typeof cwd === 'string') {
+      const workspaceRegistry = getWorkspaceRegistry()
+      if (workspaceRegistry) {
+        try {
+          const ws = await workspaceRegistry.resolveByPath(cwd)
+          if (ws) return ws.id
+        } catch (e) {
+          console.log('kanban: workspace resolve failed: ' + ((e && e.message) || e))
+        }
       }
     }
     return 'default'
@@ -115,10 +126,11 @@ export function apply(ctx) {
   const resultSchema = {
     type: 'object',
     properties: {
-      ok: { type: 'boolean', required: true },
-      message: { type: 'string', required: true },
-      board: { type: 'json' },
+      ok: { type: 'boolean' },
+      message: { type: 'string' },
+      board: { type: 'object' },
     },
+    required: ['ok', 'message'],
     additionalProperties: false,
   }
   const renderBoard = (value) => {
