@@ -147,6 +147,7 @@ return {
         if (typeof a.label === 'string') card.label = a.label.slice(0, 20) || undefined
         if (typeof a.priority === 'string') card.priority = normPriority(a.priority)
         if (typeof a.color === 'string') card.color = normColor(a.color)
+        if (typeof a.dueDate === 'string') card.dueDate = normDueDate(a.dueDate)
         await save(wsid)
       }
       return { board: cloneBoard(b) }
@@ -262,7 +263,7 @@ return {
         }
         if (Array.isArray(b.cards)) {
           for (const card of b.cards) {
-            lines.push('  - [' + card.id + '] ' + (card.priority ? '[' + card.priority + '] ' : '') + (card.label ? '[' + card.label + '] ' : '') + card.title)
+            lines.push('  - [' + card.id + '] ' + (card.priority ? '[' + card.priority + '] ' : '') + (card.label ? '[' + card.label + '] ' : '') + (card.dueDate ? '{' + card.dueDate + '} ' : '') + card.title)
           }
         }
       }

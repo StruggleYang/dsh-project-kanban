@@ -116,12 +116,13 @@ export function apply(ctx) {
       title: c.title,
       count: b.cards.filter((k) => k.columnId === c.id).length,
     })),
-    cards: b.cards.map((c) => ({ id: c.id, columnId: c.columnId, title: c.title, label: c.label ?? null, priority: c.priority ?? null, color: c.color ?? null })),
+    cards: b.cards.map((c) => ({ id: c.id, columnId: c.columnId, title: c.title, label: c.label ?? null, priority: c.priority ?? null, color: c.color ?? null, dueDate: c.dueDate ?? null })),
   })
   const str = (v, fb) => (typeof v === 'string' ? v : fb)
   const PRIORITIES = ['high', 'medium', 'low']
   const normPriority = (v) => (typeof v === 'string' && PRIORITIES.includes(v) ? v : undefined)
   const normColor = (v) => (typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v) ? v.toLowerCase() : undefined)
+  const normDueDate = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined)
   const findCard = (b, id) => b.cards.find((c) => c.id === id)
   const findColumn = (b, id) => b.columns.find((c) => c.id === id)
   const colOf = (b, columnId) => findColumn(b, str(columnId, '')) || b.columns[0]
@@ -133,7 +134,7 @@ export function apply(ctx) {
   }
   const cloneBoard = (b) => ({
     columns: b.columns.map((c) => ({ id: c.id, title: c.title })),
-    cards: b.cards.map((c) => ({ id: c.id, columnId: c.columnId, title: c.title, note: c.note, label: c.label ?? null, priority: c.priority ?? null, color: c.color ?? null })),
+    cards: b.cards.map((c) => ({ id: c.id, columnId: c.columnId, title: c.title, note: c.note, label: c.label ?? null, priority: c.priority ?? null, color: c.color ?? null, dueDate: c.dueDate ?? null })),
   })
   const dispatch = async (method, args) => {
     const wsid = wsidOf(args)
@@ -153,6 +154,7 @@ export function apply(ctx) {
           label: typeof a.label === 'string' ? a.label.slice(0, 20) : undefined,
           priority: normPriority(a.priority),
           color: normColor(a.color),
+          dueDate: normDueDate(a.dueDate),
         })
         await save(wsid)
         return { board: cloneBoard(b), persisted: true }
@@ -165,6 +167,7 @@ export function apply(ctx) {
           if (typeof a.label === 'string') card.label = a.label.slice(0, 20) || undefined
           if (typeof a.priority === 'string') card.priority = normPriority(a.priority)
           if (typeof a.color === 'string') card.color = normColor(a.color)
+          if (typeof a.dueDate === 'string') card.dueDate = normDueDate(a.dueDate)
           await save(wsid)
         }
         return { board: cloneBoard(b) }
@@ -306,7 +309,7 @@ export function apply(ctx) {
       }
       if (Array.isArray(b.cards)) {
         for (const card of b.cards) {
-          lines.push('  - [' + card.id + '] ' + (card.priority ? '[' + card.priority + '] ' : '') + (card.label ? '[' + card.label + '] ' : '') + card.title)
+          lines.push('  - [' + card.id + '] ' + (card.priority ? '[' + card.priority + '] ' : '') + (card.label ? '[' + card.label + '] ' : '') + (card.dueDate ? '{' + card.dueDate + '} ' : '') + card.title)
         }
       }
     }
@@ -338,6 +341,7 @@ export function apply(ctx) {
           label: { type: 'string', description: '卡片标签（可选）：功能 / 缺陷 / 文档 / 优化' },
           priority: { type: 'string', enum: ['high', 'medium', 'low'], description: '优先级（可选）：high / medium / low' },
           color: { type: 'string', description: '自定义卡片背景色（可选）：#rrggbb 十六进制' },
+          dueDate: { type: 'string', description: '截止日期（可选）：YYYY-MM-DD' },
         },
         required: ['title'],
       },
@@ -355,6 +359,7 @@ export function apply(ctx) {
           label: typeof (args && args.label) === 'string' ? args.label.slice(0, 20) : undefined,
           priority: normPriority(args && args.priority),
           color: normColor(args && args.color),
+          dueDate: normDueDate(args && args.dueDate),
         })
         await save(wsid)
         return toolResult('已添加卡片到「' + col.title + '」（工作区 ' + wsid + '）', b)
@@ -372,6 +377,7 @@ export function apply(ctx) {
           label: { type: 'string', description: '新标签（可选）：功能 / 缺陷 / 文档 / 优化；传空字符串清除' },
           priority: { type: 'string', enum: ['high', 'medium', 'low'], description: '新优先级（可选）；传空字符串清除' },
           color: { type: 'string', description: '新卡片背景色（可选）：#rrggbb；传空字符串清除' },
+          dueDate: { type: 'string', description: '新截止日期（可选）：YYYY-MM-DD；传空字符串清除' },
         },
         required: ['id'],
       },
@@ -386,6 +392,7 @@ export function apply(ctx) {
         if (typeof args.label === 'string') card.label = args.label.slice(0, 20) || undefined
         if (typeof args.priority === 'string') card.priority = normPriority(args.priority)
         if (typeof args.color === 'string') card.color = normColor(args.color)
+        if (typeof args.dueDate === 'string') card.dueDate = normDueDate(args.dueDate)
         await save(wsid)
         return toolResult('已更新卡片', b)
       },
