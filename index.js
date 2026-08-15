@@ -110,14 +110,17 @@ export function apply(ctx) {
     }
     return 'default'
   }
-  const summary = (b) => ({
-    columns: b.columns.map((c) => ({
-      id: c.id,
-      title: c.title,
-      count: b.cards.filter((k) => k.columnId === c.id).length,
-    })),
-    cards: b.cards.map((c) => ({ id: c.id, columnId: c.columnId, title: c.title, label: c.label ?? null, priority: c.priority ?? null, color: c.color ?? null, dueDate: c.dueDate ?? null })),
-  })
+  const summary = (b, includeArchived = false) => {
+    const visible = b.cards.filter((c) => includeArchived || c.archived !== true)
+    return {
+      columns: b.columns.map((c) => ({
+        id: c.id,
+        title: c.title,
+        count: visible.filter((k) => k.columnId === c.id).length,
+      })),
+      cards: visible.map((c) => ({ id: c.id, columnId: c.columnId, title: c.title, label: c.label ?? null, priority: c.priority ?? null, color: c.color ?? null, dueDate: c.dueDate ?? null, archived: c.archived === true })),
+    }
+  }
   const str = (v, fb) => (typeof v === 'string' ? v : fb)
   const PRIORITIES = ['high', 'medium', 'low']
   const normPriority = (v) => (typeof v === 'string' && PRIORITIES.includes(v) ? v : undefined)
@@ -132,17 +135,24 @@ export function apply(ctx) {
     const v = args && args.workspaceId
     return typeof v === 'string' && v.length > 0 ? v : 'default'
   }
-  const cloneBoard = (b) => ({
+  const cloneBoard = (b, includeArchived = false) => ({
     columns: b.columns.map((c) => ({ id: c.id, title: c.title })),
-    cards: b.cards.map((c) => ({ id: c.id, columnId: c.columnId, title: c.title, note: c.note, label: c.label ?? null, priority: c.priority ?? null, color: c.color ?? null, dueDate: c.dueDate ?? null })),
+    cards: b.cards
+      .filter((c) => includeArchived || c.archived !== true)
+      .map((c) => ({ id: c.id, columnId: c.columnId, title: c.title, note: c.note, label: c.label ?? null, priority: c.priority ?? null, color: c.color ?? null, dueDate: c.dueDate ?? null, archived: c.archived === true }))
   })
   const dispatch = async (method, args) => {
     const wsid = wsidOf(args)
     const b = await boardOf(wsid)
     const a = args || {}
     switch (method) {
-      case 'kanban.get':
-        return { board: cloneBoard(b), persisted: fileTargets.has(wsid) && fileTargets.get(wsid) !== null }
+      case 'kanban.get': {
+        const includeArchived = a.includeArchived === true
+        return {
+          board: cloneBoard(b, includeArchived),
+          persisted: fileTargets.has(wsid) && fileTargets.get(wsid) !== null,
+        }
+      }
       case 'kanban.addCard': {
         const col = colOf(b, a.columnId)
         if (!col) return { board: cloneBoard(b) }
@@ -173,6 +183,23 @@ export function apply(ctx) {
         return { board: cloneBoard(b) }
       }
       case 'kanban.deleteCard': {
+        // 软删除：标记 archived，卡片进入回收站（可从 UI 或 restore_card 恢复）
+        const card = findCard(b, str(a.id, ''))
+        if (card) {
+          card.archived = true
+          await save(wsid)
+        }
+        return { board: cloneBoard(b) }
+      }
+      case 'kanban.restoreCard': {
+        const card = findCard(b, str(a.id, ''))
+        if (card) {
+          card.archived = false
+          await save(wsid)
+        }
+        return { board: cloneBoard(b) }
+      }
+      case 'kanban.purgeCard': {
         const id = str(a.id, '')
         b.cards = b.cards.filter((c) => c.id !== id)
         await save(wsid)
@@ -321,7 +348,12 @@ export function apply(ctx) {
     {
       name: 'kanban_get',
       description: '读取当前项目（工作区）看板的当前状态（所有列表与卡片）。做规划前先调用它了解现有内容，避免重复建卡。',
-      parameters: { type: 'object', properties: {} },
+      parameters: {
+        type: 'object',
+        properties: {
+          includeArchived: { type: 'boolean', description: '是否包含回收站中的卡片（可选，默认 false）' },
+        },
+      },
       output: { schema: resultSchema, render: (args, value) => renderBoard(value) },
       async execute(args, exec) {
         const wsid = await wsidOfExec(exec)
@@ -399,7 +431,7 @@ export function apply(ctx) {
     },
     {
       name: 'kanban_delete_card',
-      description: '从看板删除一张卡片。',
+      description: '把一张卡片移入回收站（软删除）。可用 kanban_restore_card 恢复，或 kanban_purge_card 彻底删除。',
       parameters: {
         type: 'object',
         properties: { id: { type: 'string', description: '卡片 id' } },
@@ -450,6 +482,43 @@ export function apply(ctx) {
         else b.cards.push(copy)
         await save(wsid)
         return toolResult('已复制卡片到「' + findColumn(b, colId).title + '」', b)
+      },
+    },
+    {
+      name: 'kanban_restore_card',
+      description: '从回收站恢复一张已删除（归档）的卡片。',
+      parameters: {
+        type: 'object',
+        properties: { id: { type: 'string', description: '卡片 id' } },
+        required: ['id'],
+      },
+      output: { schema: resultSchema, render: (args, value) => renderBoard(value) },
+      async execute(args, exec) {
+        const wsid = await wsidOfExec(exec)
+        const b = await boardOf(wsid)
+        const card = findCard(b, str(args && args.id, ''))
+        if (!card) return { ok: false, message: '找不到卡片 ' + str(args && args.id, '') }
+        card.archived = false
+        await save(wsid)
+        return toolResult('已恢复卡片', b)
+      },
+    },
+    {
+      name: 'kanban_purge_card',
+      description: '从看板彻底删除一张卡片（不可恢复）。',
+      parameters: {
+        type: 'object',
+        properties: { id: { type: 'string', description: '卡片 id' } },
+        required: ['id'],
+      },
+      output: { schema: resultSchema, render: (args, value) => renderBoard(value) },
+      async execute(args, exec) {
+        const wsid = await wsidOfExec(exec)
+        const b = await boardOf(wsid)
+        const id = str(args && args.id, '')
+        b.cards = b.cards.filter((c) => c.id !== id)
+        await save(wsid)
+        return toolResult('已彻底删除卡片', b)
       },
     },
     {
