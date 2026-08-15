@@ -9,7 +9,7 @@
 - **Agent 对话联动**：8 个模型工具 `kanban_get / kanban_add_card / kanban_update_card / kanban_delete_card / kanban_move_card / kanban_add_column / kanban_rename_column / kanban_delete_column`——做复杂项目功能拆解与规划时由 Agent 直接调用写卡
 - **按工作区（项目）隔离**：每个工作区一块独立看板——新开工作区看到的是自己的空板，互不串扰；Agent 工具按当前会话所属工作区自动定位目标看板
 - **磁盘持久化**：每次改动自动写入 `kanban-board-<workspaceId>.json`（位于 `sandboxPolicy.workspaceRoot`），刷新页面与重启进程不丢数据
-- **浏览器看板 UI**（可选）：动态插件版提供「看板」标签页（卡片拖拽、增删改），源码见 `src/`
+- **浏览器看板 UI**：安装即得「看板」标签页（卡片拖拽、增删改），无需额外安装
 
 ## 安装（官方推荐方式）
 
@@ -98,14 +98,9 @@ dsh plugin --profile web remove dsh-project-kanban
 | `kanban_rename_column` | 重命名列表 |
 | `kanban_delete_column` | 删除列表（卡片并入第一个列表） |
 
-## 浏览器看板 UI（动态插件版）
+## 动态插件版（历史参考）
 
-官方 bundle 目前提供 Agent 工具 + 持久化。带「看板」标签页 UI 的版本是动态插件（通过 `cordis_define` 定义、`cordis_run` 激活，激活需一次授权）：
-
-- `src/host.js` — 动态插件宿主端代码（`code.host` 函数体）
-- `src/client.js` — 动态插件浏览器端代码（`code.client` 函数体）
-
-在 DeepSeek Harness Web 界面中对 Agent 说"编写一个项目看板插件"，或直接把两个文件的内容作为 `code.host` / `code.client` 传入 `cordis_define`。
+0.2.0 起 bundle 已内置浏览器 UI，动态插件版（`src/host.js` / `src/client.js`，通过 `cordis_define` 激活）仅作为动态加载场景的参考实现保留。
 
 ## 文件结构
 
@@ -113,9 +108,10 @@ dsh plugin --profile web remove dsh-project-kanban
 dsh-project-kanban/
 ├── package.json       # bundle manifest（dsh.bundle 声明）
 ├── cordis.patch.yml   # 补丁层：插入看板插件行
-├── index.js           # 宿主插件（ctx.tools.register 注册 8 个工具）
-├── src/host.js        # 动态插件版宿主端（含浏览器 RPC）
-├── src/client.js      # 动态插件版浏览器端（看板 UI）
+├── index.js           # 宿主插件（8 个工具 + /api/kanban 数据层）
+├── lib/client.js      # 浏览器端 bundle（看板 UI，官方 client-modules 格式）
+├── src/host.js        # 动态插件版宿主端（历史参考）
+├── src/client.js      # 动态插件版浏览器端（历史参考）
 ├── README.md
 ├── TWEET.md
 └── LICENSE
