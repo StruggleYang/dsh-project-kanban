@@ -116,7 +116,7 @@ export function apply(ctx) {
       title: c.title,
       count: b.cards.filter((k) => k.columnId === c.id).length,
     })),
-    cards: b.cards.map((c) => ({ id: c.id, columnId: c.columnId, title: c.title })),
+    cards: b.cards.map((c) => ({ id: c.id, columnId: c.columnId, title: c.title, label: c.label })),
   })
   const str = (v, fb) => (typeof v === 'string' ? v : fb)
   const findCard = (b, id) => b.cards.find((c) => c.id === id)
@@ -130,7 +130,7 @@ export function apply(ctx) {
   }
   const cloneBoard = (b) => ({
     columns: b.columns.map((c) => ({ id: c.id, title: c.title })),
-    cards: b.cards.map((c) => ({ id: c.id, columnId: c.columnId, title: c.title, note: c.note })),
+    cards: b.cards.map((c) => ({ id: c.id, columnId: c.columnId, title: c.title, note: c.note, label: c.label })),
   })
   const dispatch = async (method, args) => {
     const wsid = wsidOf(args)
@@ -147,6 +147,7 @@ export function apply(ctx) {
           columnId: col.id,
           title: str(a.title, '').slice(0, 120) || '未命名卡片',
           note: str(a.note, '').slice(0, 500),
+          label: typeof a.label === 'string' ? a.label.slice(0, 20) : undefined,
         })
         await save(wsid)
         return { board: cloneBoard(b), persisted: true }
@@ -156,6 +157,7 @@ export function apply(ctx) {
         if (card) {
           if (typeof a.title === 'string') card.title = a.title.slice(0, 120) || card.title
           if (typeof a.note === 'string') card.note = a.note.slice(0, 500)
+          if (typeof a.label === 'string') card.label = a.label.slice(0, 20) || undefined
           await save(wsid)
         }
         return { board: cloneBoard(b) }
@@ -263,7 +265,7 @@ export function apply(ctx) {
       }
       if (Array.isArray(b.cards)) {
         for (const card of b.cards) {
-          lines.push('  - [' + card.id + '] ' + card.title)
+          lines.push('  - [' + card.id + '] ' + (card.label ? '[' + card.label + '] ' : '') + card.title)
         }
       }
     }
@@ -292,6 +294,7 @@ export function apply(ctx) {
           title: { type: 'string', description: '卡片标题（任务名，简洁可执行）' },
           columnId: { type: 'string', description: '目标列表 id；省略则放入第一个列表（通常为待办）' },
           note: { type: 'string', description: '备注：背景、验收标准或拆解细节（可选）' },
+          label: { type: 'string', description: '卡片标签（可选）：功能 / 缺陷 / 文档 / 优化' },
         },
         required: ['title'],
       },
@@ -306,6 +309,7 @@ export function apply(ctx) {
           columnId: col.id,
           title: str(args && args.title, '').slice(0, 120) || '未命名卡片',
           note: str(args && args.note, '').slice(0, 500),
+          label: typeof (args && args.label) === 'string' ? args.label.slice(0, 20) : undefined,
         })
         await save(wsid)
         return toolResult('已添加卡片到「' + col.title + '」（工作区 ' + wsid + '）', b)
@@ -320,6 +324,7 @@ export function apply(ctx) {
           id: { type: 'string', description: '卡片 id' },
           title: { type: 'string', description: '新标题（可选）' },
           note: { type: 'string', description: '新备注（可选）' },
+          label: { type: 'string', description: '新标签（可选）：功能 / 缺陷 / 文档 / 优化；传空字符串清除' },
         },
         required: ['id'],
       },
@@ -331,6 +336,7 @@ export function apply(ctx) {
         if (!card) return { ok: false, message: '找不到卡片 ' + str(args && args.id, '') }
         if (typeof args.title === 'string') card.title = args.title.slice(0, 120) || card.title
         if (typeof args.note === 'string') card.note = args.note.slice(0, 500)
+        if (typeof args.label === 'string') card.label = args.label.slice(0, 20) || undefined
         await save(wsid)
         return toolResult('已更新卡片', b)
       },

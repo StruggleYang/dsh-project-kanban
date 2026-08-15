@@ -99,7 +99,7 @@ return {
     }
     const cloneBoard = (b) => ({
       columns: b.columns.map((c) => ({ id: c.id, title: c.title })),
-      cards: b.cards.map((c) => ({ id: c.id, columnId: c.columnId, title: c.title, note: c.note })),
+      cards: b.cards.map((c) => ({ id: c.id, columnId: c.columnId, title: c.title, note: c.note, label: c.label })),
     })
     const summary = (b) => ({
       columns: b.columns.map((c) => ({
@@ -107,7 +107,7 @@ return {
         title: c.title,
         count: b.cards.filter((k) => k.columnId === c.id).length,
       })),
-      cards: b.cards.map((c) => ({ id: c.id, columnId: c.columnId, title: c.title })),
+      cards: b.cards.map((c) => ({ id: c.id, columnId: c.columnId, title: c.title, label: c.label })),
     })
     const str = (v, fb) => (typeof v === 'string' ? v : fb)
     const findCard = (b, id) => b.cards.find((c) => c.id === id)
@@ -131,6 +131,7 @@ return {
         columnId: col.id,
         title: str(a.title, '').slice(0, 120) || '未命名卡片',
         note: str(a.note, '').slice(0, 500),
+        label: typeof a.label === 'string' ? a.label.slice(0, 20) : undefined,
       })
       await save(wsid)
       return { board: cloneBoard(b), persisted: true }
@@ -143,6 +144,7 @@ return {
       if (card) {
         if (typeof a.title === 'string') card.title = a.title.slice(0, 120) || card.title
         if (typeof a.note === 'string') card.note = a.note.slice(0, 500)
+        if (typeof a.label === 'string') card.label = a.label.slice(0, 20) || undefined
         await save(wsid)
       }
       return { board: cloneBoard(b) }
@@ -264,6 +266,7 @@ return {
             columnId: col.id,
             title: str(args && args.title, '').slice(0, 120) || '未命名卡片',
             note: str(args && args.note, '').slice(0, 500),
+            label: typeof (args && args.label) === 'string' ? args.label.slice(0, 20) : undefined,
           })
           await save(wsid)
           return toolResult('已添加卡片到「' + col.title + '」（工作区 ' + wsid + '）', b)
@@ -289,6 +292,7 @@ return {
           if (!card) return { ok: false, message: '找不到卡片 ' + str(args && args.id, '') }
           if (typeof args.title === 'string') card.title = args.title.slice(0, 120) || card.title
           if (typeof args.note === 'string') card.note = args.note.slice(0, 500)
+          if (typeof args.label === 'string') card.label = args.label.slice(0, 20) || undefined
           await save(wsid)
           return toolResult('已更新卡片', b)
         },
