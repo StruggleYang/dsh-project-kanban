@@ -275,6 +275,37 @@ export function apply(ctx) {
         await save(wsid)
         return { board: cloneBoard(b) }
       }
+      case 'kanban.bulkMoveCards': {
+        const ids = Array.isArray(a.ids) ? a.ids.filter((x) => typeof x === 'string') : []
+        const target = findColumn(b, str(a.columnId, ''))
+        if (target) {
+          for (const id of ids) {
+            const card = findCard(b, id)
+            if (card) card.columnId = target.id
+          }
+          await save(wsid)
+        }
+        return { board: cloneBoard(b) }
+      }
+      case 'kanban.bulkDeleteCards': {
+        const ids = Array.isArray(a.ids) ? a.ids.filter((x) => typeof x === 'string') : []
+        for (const id of ids) {
+          const card = findCard(b, id)
+          if (card) card.archived = true
+        }
+        await save(wsid)
+        return { board: cloneBoard(b) }
+      }
+      case 'kanban.bulkSetLabel': {
+        const ids = Array.isArray(a.ids) ? a.ids.filter((x) => typeof x === 'string') : []
+        const label = typeof a.label === 'string' ? a.label.slice(0, 20) : ''
+        for (const id of ids) {
+          const card = findCard(b, id)
+          if (card) card.label = label || undefined
+        }
+        await save(wsid)
+        return { board: cloneBoard(b) }
+      }
       default:
         return { error: 'unknown kanban method: ' + method }
     }
@@ -482,6 +513,29 @@ export function apply(ctx) {
         else b.cards.push(copy)
         await save(wsid)
         return toolResult('已复制卡片到「' + findColumn(b, colId).title + '」', b)
+      },
+    },
+    {
+      name: 'kanban_bulk_delete_cards',
+      description: '批量把多张卡片移入回收站（软删除）。清理大批任务时使用。',
+      parameters: {
+        type: 'object',
+        properties: {
+          ids: { type: 'array', items: { type: 'string' }, description: '要删除的卡片 id 列表' },
+        },
+        required: ['ids'],
+      },
+      output: { schema: resultSchema, render: (args, value) => renderBoard(value) },
+      async execute(args, exec) {
+        const wsid = await wsidOfExec(exec)
+        const b = await boardOf(wsid)
+        const ids = Array.isArray(args && args.ids) ? args.ids.filter((x) => typeof x === 'string') : []
+        for (const id of ids) {
+          const card = findCard(b, id)
+          if (card) card.archived = true
+        }
+        await save(wsid)
+        return toolResult('已批量移入回收站 ' + ids.length + ' 张', b)
       },
     },
     {
