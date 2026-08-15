@@ -48,12 +48,18 @@ dsh plugin --profile web add ./dsh-project-kanban
 
 ### 方式三：tarball / npm（构建产物，无需任何构建许可）
 
+tarball 可从 **GitHub Release** 下载（<https://github.com/StruggleYang/dsh-project-kanban/releases/latest>），或本地生成：
+
 ```sh
 pnpm pack        # 在仓库目录生成 dsh-project-kanban-0.1.0.tgz
 dsh plugin --profile web add ./dsh-project-kanban-0.1.0.tgz
 ```
 
-发布到 npm 后用户直接 `dsh plugin --profile web add dsh-project-kanban`。
+发布到 npm 后用户直接安装：
+
+```sh
+dsh plugin --profile web add dsh-project-kanban
+```
 
 ### 验证与启用
 
