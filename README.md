@@ -10,6 +10,7 @@
 - **按工作区（项目）隔离**：每个工作区一块独立看板——新开工作区看到的是自己的空板，互不串扰；Agent 工具按当前会话所属工作区自动定位目标看板
 - **磁盘持久化**：每次改动自动写入 `kanban-board-<workspaceId>.json`（位于 `sandboxPolicy.workspaceRoot`），刷新页面与重启进程不丢数据
 - **浏览器看板 UI**：安装即得「看板」标签页（卡片拖拽、增删改），无需额外安装
+- **标签与颜色**：功能（蓝）/ 缺陷（红）/ 文档（绿）/ 优化（橙），添加或编辑卡片时选择；Agent 工具的 `label` 参数同样支持
 
 ## 安装（官方推荐方式）
 
@@ -90,8 +91,8 @@ dsh plugin --profile web remove dsh-project-kanban
 | 工具 | 用途 |
 |---|---|
 | `kanban_get` | 读取当前项目看板状态（规划前先看，避免重复建卡） |
-| `kanban_add_card` | 添加卡片（拆解任务 → 写一张卡） |
-| `kanban_update_card` | 更新卡片标题 / 备注 |
+| `kanban_add_card` | 添加卡片（拆解任务 → 写一张卡，可带 `label` 标签） |
+| `kanban_update_card` | 更新卡片标题 / 备注 / 标签 |
 | `kanban_delete_card` | 删除卡片 |
 | `kanban_move_card` | 移动卡片（任务状态变化时调用） |
 | `kanban_add_column` | 添加列表（新工作流阶段） |
