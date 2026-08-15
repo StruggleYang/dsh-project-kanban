@@ -99,7 +99,7 @@ return {
     }
     const cloneBoard = (b) => ({
       columns: b.columns.map((c) => ({ id: c.id, title: c.title })),
-      cards: b.cards.map((c) => ({ id: c.id, columnId: c.columnId, title: c.title, note: c.note, label: c.label })),
+      cards: b.cards.map((c) => ({ id: c.id, columnId: c.columnId, title: c.title, note: c.note, label: c.label ?? null })),
     })
     const summary = (b) => ({
       columns: b.columns.map((c) => ({
@@ -107,7 +107,7 @@ return {
         title: c.title,
         count: b.cards.filter((k) => k.columnId === c.id).length,
       })),
-      cards: b.cards.map((c) => ({ id: c.id, columnId: c.columnId, title: c.title, label: c.label })),
+      cards: b.cards.map((c) => ({ id: c.id, columnId: c.columnId, title: c.title, label: c.label ?? null })),
     })
     const str = (v, fb) => (typeof v === 'string' ? v : fb)
     const findCard = (b, id) => b.cards.find((c) => c.id === id)
@@ -145,6 +145,8 @@ return {
         if (typeof a.title === 'string') card.title = a.title.slice(0, 120) || card.title
         if (typeof a.note === 'string') card.note = a.note.slice(0, 500)
         if (typeof a.label === 'string') card.label = a.label.slice(0, 20) || undefined
+        if (typeof a.priority === 'string') card.priority = normPriority(a.priority)
+        if (typeof a.color === 'string') card.color = normColor(a.color)
         await save(wsid)
       }
       return { board: cloneBoard(b) }
@@ -157,6 +159,30 @@ return {
       await save(wsid)
       return { board: cloneBoard(b) }
     })
+    harness.handle('kanban.duplicateCard', async (args) => {
+      const wsid = wsidOf(args)
+      const b = await boardOf(wsid)
+      const a = args || {}
+      const card = findCard(b, str(a.id, ''))
+      if (!card) return { board: cloneBoard(b) }
+      const colId = typeof a.columnId === 'string' && findColumn(b, a.columnId) ? a.columnId : card.columnId
+      const copy = {
+        id: 'k' + (++seq),
+        columnId: colId,
+        title: card.title,
+        note: card.note,
+        label: card.label,
+        priority: card.priority,
+        color: card.color,
+      }
+      const inCol = b.cards.filter((c) => c.columnId === colId)
+      const idx = typeof a.toIndex === 'number' && Number.isFinite(a.toIndex) ? Math.max(0, Math.min(Math.floor(a.toIndex), inCol.length)) : inCol.length
+      const anchor = inCol[idx]
+      if (anchor) b.cards.splice(b.cards.indexOf(anchor), 0, copy)
+      else b.cards.push(copy)
+      await save(wsid)
+      return { board: cloneBoard(b) }
+    })
     harness.handle('kanban.moveCard', async (args) => {
       const wsid = wsidOf(args)
       const b = await boardOf(wsid)
@@ -164,7 +190,19 @@ return {
       const card = findCard(b, str(a.id, ''))
       const target = findColumn(b, str(a.columnId, ''))
       if (card && target) {
-        card.columnId = target.id
+        const from = b.cards.indexOf(card)
+        const toIndex = typeof a.toIndex === 'number' && Number.isFinite(a.toIndex) ? Math.max(0, Math.floor(a.toIndex)) : null
+        if (card.columnId === target.id && toIndex !== null) {
+          const rel = b.cards.filter((c) => c.columnId === target.id).indexOf(card)
+          b.cards.splice(from, 1)
+          const inCol = b.cards.filter((c) => c.columnId === target.id)
+          const insert = toIndex > rel ? toIndex - 1 : toIndex
+          const anchor = inCol[Math.min(insert, inCol.length)]
+          if (anchor) b.cards.splice(b.cards.indexOf(anchor), 0, card)
+          else b.cards.push(card)
+        } else {
+          card.columnId = target.id
+        }
         await save(wsid)
       }
       return { board: cloneBoard(b) }
@@ -224,7 +262,7 @@ return {
         }
         if (Array.isArray(b.cards)) {
           for (const card of b.cards) {
-            lines.push('  - [' + card.id + '] ' + card.title)
+            lines.push('  - [' + card.id + '] ' + (card.priority ? '[' + card.priority + '] ' : '') + (card.label ? '[' + card.label + '] ' : '') + card.title)
           }
         }
       }

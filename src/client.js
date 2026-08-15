@@ -17,7 +17,7 @@ return {
     styles.insert('.kan-root{display:flex;flex-direction:column;gap:12px;height:100%;min-height:420px;padding:16px 20px;box-sizing:border-box;}.kan-header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}.kan-header h2{font-size:17px;font-weight:650;margin:0;color:var(--dsw-alias-label-primary);}.kan-sub{font-size:12px;color:var(--dsw-alias-label-secondary);}.kan-error{font-size:12px;color:var(--dsw-alias-state-error-primary);}.kan-board{display:flex;gap:12px;align-items:flex-start;overflow-x:auto;flex:1;min-height:0;padding-bottom:8px;}.kan-col{width:272px;flex:none;display:flex;flex-direction:column;gap:8px;background:var(--dsw-alias-bg-layer-1);border:1px solid var(--dsw-alias-border-l1);border-radius:10px;padding:10px;max-height:100%;box-sizing:border-box;}.kan-col.kan-drop{border-color:var(--dsw-alias-brand-primary);}.kan-col-head{display:flex;align-items:center;gap:6px;min-height:26px;}.kan-col-title{font-size:14px;font-weight:600;margin:0;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-primary);}.kan-count{font-size:11px;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-2);border-radius:999px;padding:0 8px;}.kan-col-body{display:flex;flex-direction:column;gap:8px;overflow-y:auto;min-height:56px;}.kan-card{background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);border-radius:8px;padding:8px 10px;cursor:grab;}.kan-card.dragging{opacity:.45;}.kan-card-title{font-size:13px;font-weight:600;color:var(--dsw-alias-label-primary);word-break:break-word;}.kan-card-note{font-size:12px;color:var(--dsw-alias-label-secondary);margin-top:4px;white-space:pre-wrap;word-break:break-word;}.kan-card-actions{display:flex;gap:4px;margin-top:8px;flex-wrap:wrap;}.kan-card-edit{display:flex;flex-direction:column;gap:6px;}.kan-btn{font-size:12px;color:var(--dsw-alias-label-secondary);background:transparent;border:1px solid var(--dsw-alias-border-l1);border-radius:6px;padding:2px 8px;cursor:pointer;font-family:inherit;}.kan-btn:hover{color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-border-l2);}.kan-btn.primary{color:var(--dsw-alias-bg-base);background:var(--dsw-alias-brand-primary);border-color:transparent;font-weight:600;}.kan-btn.danger{color:var(--dsw-alias-state-error-primary);}.kan-btn:disabled{opacity:.45;cursor:default;}.kan-input{font-size:13px;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-base);border:1px solid var(--dsw-alias-border-l2);border-radius:6px;padding:5px 8px;width:100%;box-sizing:border-box;font-family:inherit;}.kan-input:focus{outline:none;border-color:var(--dsw-alias-brand-primary);}.kan-textarea{resize:vertical;min-height:52px;}.kan-add{display:flex;flex-direction:column;gap:6px;}.kan-add-actions{display:flex;gap:6px;}.kan-add-btn{width:100%;padding:6px 0;color:var(--dsw-alias-label-secondary);}.kan-empty{font-size:12px;color:var(--dsw-alias-label-secondary);padding:12px 4px;text-align:center;}.kan-col-add{background:transparent;border-style:dashed;justify-content:center;}.kan-col-add-btn{width:272px;flex:none;align-self:flex-start;padding:12px;text-align:center;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-1);border:1px dashed var(--dsw-alias-border-l2);border-radius:10px;cursor:pointer;font-size:13px;font-family:inherit;}.kan-col-add-btn:hover{color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-brand-primary);}.kan-hint{font-size:11px;color:var(--dsw-alias-label-secondary);}')
 
     const h = React.createElement
-    const emptyDraft = { title: '', note: '', label: '', open: false }
+    const emptyDraft = { title: '', note: '', label: '', priority: '', color: '', open: false }
 
     function KanbanView(props) {
       const sessionId = props && props.sessionId
@@ -36,7 +36,7 @@ return {
       const [persisted, setPersisted] = React.useState(false)
       const [drafts, setDrafts] = React.useState({})
       const [editId, setEditId] = React.useState(null)
-      const [editDraft, setEditDraft] = React.useState({ title: '', note: '', label: '' })
+      const [editDraft, setEditDraft] = React.useState({ title: '', note: '', label: '', priority: '', color: '' })
       const [renameId, setRenameId] = React.useState(null)
       const [renameDraft, setRenameDraft] = React.useState('')
       const [newColOpen, setNewColOpen] = React.useState(false)
@@ -74,19 +74,27 @@ return {
         const target = board.columns[idx + delta]
         if (target) act('kanban.moveCard', { id: card.id, columnId: target.id })
       }
+      const shiftInColumn = (card, delta) => {
+        if (!board) return
+        const inCol = board.cards.filter((c) => c.columnId === card.columnId)
+        const idx = inCol.indexOf(card)
+        const to = idx + delta
+        if (to < 0 || to >= inCol.length) return
+        act('kanban.moveCard', { id: card.id, columnId: card.columnId, toIndex: to })
+      }
       const startEdit = (card) => {
         setEditId(card.id)
-        setEditDraft({ title: card.title, note: card.note || '', label: card.label || '' })
+        setEditDraft({ title: card.title, note: card.note || '', label: card.label || '', priority: card.priority || '', color: card.color || '' })
       }
       const saveEdit = (card) => {
-        act('kanban.updateCard', { id: card.id, title: editDraft.title, note: editDraft.note, label: editDraft.label })
+        act('kanban.updateCard', { id: card.id, title: editDraft.title, note: editDraft.note, label: editDraft.label, priority: editDraft.priority, color: editDraft.color })
         setEditId(null)
       }
       const setDraft = (columnId, patch) => setDrafts((d) => ({ ...d, [columnId]: { ...(d[columnId] || emptyDraft), ...patch } }))
       const submitAdd = (columnId) => {
         const d = drafts[columnId]
         if (d && d.title && d.title.trim()) {
-          act('kanban.addCard', { columnId, title: d.title, note: d.note || '', label: d.label || undefined })
+          act('kanban.addCard', { columnId, title: d.title, note: d.note || '', label: d.label || undefined, priority: d.priority || undefined, color: d.color || undefined })
         }
         setDraft(columnId, { ...emptyDraft, open: false })
       }
@@ -108,6 +116,16 @@ return {
                 h('option', { key: '文档', value: '文档' }, '文档'),
                 h('option', { key: '优化', value: '优化' }, '优化'),
               ]),
+              h('select', { key: 'p', className: 'kan-input', value: editDraft.priority || '', onChange: (e) => setEditDraft({ ...editDraft, priority: e.target.value }) }, [
+                h('option', { key: 'none', value: '' }, '无优先级'),
+                h('option', { key: 'high', value: 'high' }, '高'),
+                h('option', { key: 'medium', value: 'medium' }, '中'),
+                h('option', { key: 'low', value: 'low' }, '低'),
+              ]),
+              h('div', { key: 'c', className: 'kan-add-actions' }, [
+                h('input', { key: 'ci', type: 'color', value: editDraft.color || '#38bdf8', onChange: (e) => setEditDraft({ ...editDraft, color: e.target.value }) }),
+                h('button', { key: 'cx', className: 'kan-btn', title: '清除颜色', onClick: () => setEditDraft({ ...editDraft, color: '' }) }, '清除颜色'),
+              ]),
               h('textarea', { key: 'n', className: 'kan-input kan-textarea', value: editDraft.note, placeholder: '备注（可选）', onChange: (e) => setEditDraft({ ...editDraft, note: e.target.value }) }),
             ])
           : h('div', null, [
@@ -116,14 +134,22 @@ return {
               card.note ? h('div', { className: 'kan-card-note' }, card.note) : null,
             ])
         const actions = h('div', { className: 'kan-card-actions' }, [
+          h('button', { key: 'u', className: 'kan-btn', disabled: busy, title: '上移', onClick: () => shiftInColumn(card, -1) }, '↑'),
+          h('button', { key: 'dn', className: 'kan-btn', disabled: busy, title: '下移', onClick: () => shiftInColumn(card, 1) }, '↓'),
           h('button', { key: 'l', className: 'kan-btn', disabled: busy, title: '移到左列', onClick: () => move(card, -1) }, '←'),
           h('button', { key: 'r', className: 'kan-btn', disabled: busy, title: '移到右列', onClick: () => move(card, 1) }, '→'),
+          h('button', { key: 'c', className: 'kan-btn', disabled: busy, title: '复制卡片', onClick: () => act('kanban.duplicateCard', { id: card.id }) }, '复制'),
           h('button', { key: 'e', className: 'kan-btn', disabled: busy, onClick: () => (editing ? saveEdit(card) : startEdit(card)) }, editing ? '保存' : '编辑'),
           h('button', { key: 'd', className: 'kan-btn danger', disabled: busy, onClick: () => act('kanban.deleteCard', { id: card.id }) }, '删除'),
         ])
+        const prio = card.priority ? ({ high: { color: '#f87171' }, medium: { color: '#fbbf24' }, low: { color: '#38bdf8' } })[card.priority] : null
+        const cardStyle = {}
+        if (card.color) cardStyle.background = card.color + '40'
+        if (prio) cardStyle.borderLeft = '4px solid ' + prio.color
         return h('div', {
           key: card.id,
           className: 'kan-card' + (dragId === card.id ? ' dragging' : ''),
+          style: cardStyle,
           draggable: true,
           onDragStart: (e) => { e.dataTransfer.setData('text/plain', card.id); setDragId(card.id) },
           onDragEnd: () => setDragId(null),
@@ -154,6 +180,16 @@ return {
                 h('option', { key: '缺陷', value: '缺陷' }, '缺陷'),
                 h('option', { key: '文档', value: '文档' }, '文档'),
                 h('option', { key: '优化', value: '优化' }, '优化'),
+              ]),
+              h('select', { key: 'p', className: 'kan-input', value: draft.priority || '', onChange: (e) => setDraft(col.id, { priority: e.target.value }) }, [
+                h('option', { key: 'none', value: '' }, '无优先级'),
+                h('option', { key: 'high', value: 'high' }, '高'),
+                h('option', { key: 'medium', value: 'medium' }, '中'),
+                h('option', { key: 'low', value: 'low' }, '低'),
+              ]),
+              h('div', { key: 'c', className: 'kan-add-actions' }, [
+                h('input', { key: 'ci', type: 'color', value: draft.color || '#38bdf8', onChange: (e) => setDraft(col.id, { color: e.target.value }) }),
+                h('button', { key: 'cx', className: 'kan-btn', title: '清除颜色', onClick: () => setDraft(col.id, { color: '' }) }, '清除颜色'),
               ]),
               h('textarea', { key: 'n', className: 'kan-input kan-textarea', value: draft.note || '', placeholder: '备注（可选）', onChange: (e) => setDraft(col.id, { note: e.target.value }) }),
               h('div', { key: 'b', className: 'kan-add-actions' }, [

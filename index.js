@@ -116,9 +116,12 @@ export function apply(ctx) {
       title: c.title,
       count: b.cards.filter((k) => k.columnId === c.id).length,
     })),
-    cards: b.cards.map((c) => ({ id: c.id, columnId: c.columnId, title: c.title, label: c.label })),
+    cards: b.cards.map((c) => ({ id: c.id, columnId: c.columnId, title: c.title, label: c.label ?? null, priority: c.priority ?? null, color: c.color ?? null })),
   })
   const str = (v, fb) => (typeof v === 'string' ? v : fb)
+  const PRIORITIES = ['high', 'medium', 'low']
+  const normPriority = (v) => (typeof v === 'string' && PRIORITIES.includes(v) ? v : undefined)
+  const normColor = (v) => (typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v) ? v.toLowerCase() : undefined)
   const findCard = (b, id) => b.cards.find((c) => c.id === id)
   const findColumn = (b, id) => b.columns.find((c) => c.id === id)
   const colOf = (b, columnId) => findColumn(b, str(columnId, '')) || b.columns[0]
@@ -130,7 +133,7 @@ export function apply(ctx) {
   }
   const cloneBoard = (b) => ({
     columns: b.columns.map((c) => ({ id: c.id, title: c.title })),
-    cards: b.cards.map((c) => ({ id: c.id, columnId: c.columnId, title: c.title, note: c.note, label: c.label })),
+    cards: b.cards.map((c) => ({ id: c.id, columnId: c.columnId, title: c.title, note: c.note, label: c.label ?? null, priority: c.priority ?? null, color: c.color ?? null })),
   })
   const dispatch = async (method, args) => {
     const wsid = wsidOf(args)
@@ -148,6 +151,8 @@ export function apply(ctx) {
           title: str(a.title, '').slice(0, 120) || '未命名卡片',
           note: str(a.note, '').slice(0, 500),
           label: typeof a.label === 'string' ? a.label.slice(0, 20) : undefined,
+          priority: normPriority(a.priority),
+          color: normColor(a.color),
         })
         await save(wsid)
         return { board: cloneBoard(b), persisted: true }
@@ -158,6 +163,8 @@ export function apply(ctx) {
           if (typeof a.title === 'string') card.title = a.title.slice(0, 120) || card.title
           if (typeof a.note === 'string') card.note = a.note.slice(0, 500)
           if (typeof a.label === 'string') card.label = a.label.slice(0, 20) || undefined
+          if (typeof a.priority === 'string') card.priority = normPriority(a.priority)
+          if (typeof a.color === 'string') card.color = normColor(a.color)
           await save(wsid)
         }
         return { board: cloneBoard(b) }
@@ -168,11 +175,45 @@ export function apply(ctx) {
         await save(wsid)
         return { board: cloneBoard(b) }
       }
+      case 'kanban.duplicateCard': {
+        const card = findCard(b, str(a.id, ''))
+        if (!card) return { board: cloneBoard(b) }
+        const copy = {
+          id: 'k' + (++seq),
+          columnId: str(a.columnId, '') ? findColumn(b, str(a.columnId, '')) ? str(a.columnId, '') : card.columnId : card.columnId,
+          title: card.title,
+          note: card.note,
+          label: card.label,
+          priority: card.priority,
+          color: card.color,
+        }
+        const inCol = b.cards.filter((c) => c.columnId === copy.columnId)
+        const idx = typeof a.toIndex === 'number' && Number.isFinite(a.toIndex) ? Math.max(0, Math.min(Math.floor(a.toIndex), inCol.length)) : inCol.length
+        const anchor = inCol[idx]
+        if (anchor) b.cards.splice(b.cards.indexOf(anchor), 0, copy)
+        else b.cards.push(copy)
+        await save(wsid)
+        return { board: cloneBoard(b), persisted: true }
+      }
       case 'kanban.moveCard': {
         const card = findCard(b, str(a.id, ''))
         const target = findColumn(b, str(a.columnId, ''))
         if (card && target) {
-          card.columnId = target.id
+          const from = b.cards.indexOf(card)
+          const toIndex = typeof a.toIndex === 'number' && Number.isFinite(a.toIndex) ? Math.max(0, Math.floor(a.toIndex)) : null
+          if (card.columnId === target.id && toIndex !== null) {
+            // 同列内重排：按新索引精确插入
+            const rel = b.cards.filter((c) => c.columnId === target.id).indexOf(card)
+            b.cards.splice(from, 1)
+            const inCol = b.cards.filter((c) => c.columnId === target.id)
+            const insert = toIndex > rel ? toIndex - 1 : toIndex
+            const anchor = inCol[Math.min(insert, inCol.length)]
+            if (anchor) b.cards.splice(b.cards.indexOf(anchor), 0, card)
+            else b.cards.push(card)
+          } else {
+            // 跨列：移动到目标列末尾
+            card.columnId = target.id
+          }
           await save(wsid)
         }
         return { board: cloneBoard(b) }
@@ -265,7 +306,7 @@ export function apply(ctx) {
       }
       if (Array.isArray(b.cards)) {
         for (const card of b.cards) {
-          lines.push('  - [' + card.id + '] ' + (card.label ? '[' + card.label + '] ' : '') + card.title)
+          lines.push('  - [' + card.id + '] ' + (card.priority ? '[' + card.priority + '] ' : '') + (card.label ? '[' + card.label + '] ' : '') + card.title)
         }
       }
     }
@@ -295,6 +336,8 @@ export function apply(ctx) {
           columnId: { type: 'string', description: '目标列表 id；省略则放入第一个列表（通常为待办）' },
           note: { type: 'string', description: '备注：背景、验收标准或拆解细节（可选）' },
           label: { type: 'string', description: '卡片标签（可选）：功能 / 缺陷 / 文档 / 优化' },
+          priority: { type: 'string', enum: ['high', 'medium', 'low'], description: '优先级（可选）：high / medium / low' },
+          color: { type: 'string', description: '自定义卡片背景色（可选）：#rrggbb 十六进制' },
         },
         required: ['title'],
       },
@@ -310,6 +353,8 @@ export function apply(ctx) {
           title: str(args && args.title, '').slice(0, 120) || '未命名卡片',
           note: str(args && args.note, '').slice(0, 500),
           label: typeof (args && args.label) === 'string' ? args.label.slice(0, 20) : undefined,
+          priority: normPriority(args && args.priority),
+          color: normColor(args && args.color),
         })
         await save(wsid)
         return toolResult('已添加卡片到「' + col.title + '」（工作区 ' + wsid + '）', b)
@@ -325,6 +370,8 @@ export function apply(ctx) {
           title: { type: 'string', description: '新标题（可选）' },
           note: { type: 'string', description: '新备注（可选）' },
           label: { type: 'string', description: '新标签（可选）：功能 / 缺陷 / 文档 / 优化；传空字符串清除' },
+          priority: { type: 'string', enum: ['high', 'medium', 'low'], description: '新优先级（可选）；传空字符串清除' },
+          color: { type: 'string', description: '新卡片背景色（可选）：#rrggbb；传空字符串清除' },
         },
         required: ['id'],
       },
@@ -337,6 +384,8 @@ export function apply(ctx) {
         if (typeof args.title === 'string') card.title = args.title.slice(0, 120) || card.title
         if (typeof args.note === 'string') card.note = args.note.slice(0, 500)
         if (typeof args.label === 'string') card.label = args.label.slice(0, 20) || undefined
+        if (typeof args.priority === 'string') card.priority = normPriority(args.priority)
+        if (typeof args.color === 'string') card.color = normColor(args.color)
         await save(wsid)
         return toolResult('已更新卡片', b)
       },
@@ -360,6 +409,43 @@ export function apply(ctx) {
       },
     },
     {
+      name: 'kanban_duplicate_card',
+      description: '复制一张卡片到同列（或指定列）。拆分相似任务时使用。',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: '源卡片 id' },
+          columnId: { type: 'string', description: '目标列表 id（可选）；省略则复制到同列' },
+          toIndex: { type: 'integer', description: '目标列内位置（可选）' },
+        },
+        required: ['id'],
+      },
+      output: { schema: resultSchema, render: (args, value) => renderBoard(value) },
+      async execute(args, exec) {
+        const wsid = await wsidOfExec(exec)
+        const b = await boardOf(wsid)
+        const card = findCard(b, str(args && args.id, ''))
+        if (!card) return { ok: false, message: '找不到卡片 ' + str(args && args.id, '') }
+        const colId = typeof (args && args.columnId) === 'string' && findColumn(b, args.columnId) ? args.columnId : card.columnId
+        const copy = {
+          id: 'k' + (++seq),
+          columnId: colId,
+          title: card.title,
+          note: card.note,
+          label: card.label,
+          priority: card.priority,
+          color: card.color,
+        }
+        const inCol = b.cards.filter((c) => c.columnId === colId)
+        const idx = typeof (args && args.toIndex) === 'number' && Number.isFinite(args.toIndex) ? Math.max(0, Math.min(Math.floor(args.toIndex), inCol.length)) : inCol.length
+        const anchor = inCol[idx]
+        if (anchor) b.cards.splice(b.cards.indexOf(anchor), 0, copy)
+        else b.cards.push(copy)
+        await save(wsid)
+        return toolResult('已复制卡片到「' + findColumn(b, colId).title + '」', b)
+      },
+    },
+    {
       name: 'kanban_move_card',
       description: '把一张卡片移动到指定列表（如从待办移到进行中）。任务状态变化时调用。',
       parameters: {
@@ -367,6 +453,7 @@ export function apply(ctx) {
         properties: {
           id: { type: 'string', description: '卡片 id' },
           columnId: { type: 'string', description: '目标列表 id' },
+          toIndex: { type: 'integer', description: '目标列内位置（可选）：同列重排时生效，0 为列首' },
         },
         required: ['id', 'columnId'],
       },
