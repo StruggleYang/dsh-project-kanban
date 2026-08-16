@@ -6,6 +6,10 @@
 
 这是一个**官方 bundle 格式**的插件包（`dsh.bundle` 声明 + `cordis.patch.yml` 补丁层），通过官方 `dsh plugin` 流程安装。
 
+## 预览
+
+![看板界面](assets/screenshot-board.png)
+
 ## 功能
 
 - **Agent 对话联动**：9 个模型工具 `kanban_get / kanban_add_card / kanban_update_card / kanban_delete_card / kanban_move_card / kanban_add_column / kanban_rename_column / kanban_delete_column`——做复杂项目功能拆解与规划时由 Agent 直接调用写卡

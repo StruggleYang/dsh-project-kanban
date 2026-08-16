@@ -6,6 +6,10 @@ A kanban board inside [DeepSeek Harness](https://github.com/deepseek-ai/deepseek
 
 This is an official **bundle**-format plugin (`dsh.bundle` declaration + `cordis.patch.yml` patch layer), installed through the official `dsh plugin` flow.
 
+## Preview
+
+![Kanban board](assets/screenshot-board.png)
+
 ## Features
 
 - **Agent-driven planning**: 9 model tools (`kanban_get`, `kanban_add_card`, `kanban_update_card`, `kanban_delete_card`, `kanban_move_card`, `kanban_duplicate_card`, `kanban_add_column`, `kanban_rename_column`, `kanban_delete_column`) — the agent writes cards directly during planning and feature breakdown
