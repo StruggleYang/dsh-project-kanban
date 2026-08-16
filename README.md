@@ -1,5 +1,7 @@
 # dsh-project-kanban
 
+[![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
+
 A kanban board inside [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), integrated with the conversation: the agent writes planning cards via `kanban_*` tools while you talk, boards are isolated per workspace (project), and data is persisted to disk.
 
 This is an official **bundle**-format plugin (`dsh.bundle` declaration + `cordis.patch.yml` patch layer), installed through the official `dsh plugin` flow.

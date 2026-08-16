@@ -1,5 +1,7 @@
 # dsh-project-kanban
 
+[![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
+
 在 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 中把「项目看板」变成对话的一部分：Agent 通过 `kanban_*` 工具在规划时直接写卡，按工作区（项目）隔离，磁盘持久化。
 
 这是一个**官方 bundle 格式**的插件包（`dsh.bundle` 声明 + `cordis.patch.yml` 补丁层），通过官方 `dsh plugin` 流程安装。
