@@ -40,3 +40,7 @@ cd "$TEST_HOME/profiles/it"
 cp "$ROOT/tests/verify.mjs" ./verify.mjs
 KANBAN_TEST_PROFILE=it KANBAN_TEST_PORT="$PORT" KANBAN_TEST_PATCH="$TEST_HOME/port.yml" \
   DSH_HOME="$TEST_HOME" DSH_TELEMETRY_DISABLED=1 node ./verify.mjs
+
+echo "== 5/5 浏览器端渲染冒烟 =="
+cd "$ROOT"
+node tests/render-smoke.mjs | grep -q '"ok": true' && echo "render OK"
