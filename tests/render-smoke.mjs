@@ -58,12 +58,13 @@ const preloadedBoard = {
   ],
 }
 
-// ---- mock useState：第一个调用（board）返回预置数据 ----
+// ---- mock useState：可开关；开启后第一个调用（board）返回预置数据 ----
 const realUseState = React.useState
+let mockBoard = false
 let useStateCalls = 0
 React.useState = function (initial) {
   useStateCalls += 1
-  if (useStateCalls === 1) return [preloadedBoard, () => {}]
+  if (mockBoard && useStateCalls === 1) return [preloadedBoard, () => {}]
   return realUseState(initial)
 }
 
@@ -73,6 +74,14 @@ const props = {
 }
 
 try {
+  // 路径一：board = null（真实环境首帧）——必须渲染加载中而不崩溃
+  mockBoard = false
+  const loadingHtml = ReactDOMServer.renderToString(renderFn(props))
+  if (!loadingHtml.includes('看板加载中')) throw new Error('渲染冒烟：board=null 首帧未显示加载状态（可能崩溃）')
+
+  // 路径二：board 有数据——渲染全部 UI 分支（重置计数器让首个 useState 返回预置数据）
+  mockBoard = true
+  useStateCalls = 0
   const html = ReactDOMServer.renderToString(renderFn(props))
   // 断言：关键 UI 片段都渲染出来了
   const checks = {
